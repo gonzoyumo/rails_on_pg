@@ -1,15 +1,15 @@
 module RailsOnPg
   module Functions
-    
+
     # Create new plpgsql function
     # Example:
     #  create_function 'format_name', {:returns=>'character varying'}, 'first_name character varying(125)', 'middle_name character varying(15)', "last_name character varying(20)" do
     #    "RETURN COALESCE(last_name, 'no last name') || ', ' || COALESCE(first_name, 'no first name') || ' ' || COALESCE(middle_name || '.','');"
-    #  end    
+    #  end
     def create_function name, options={}, *params
       options.reverse_merge!({:as=>'$$'})
       returns = options[:returns]
-      declare = %{DECLARE 
+      declare = %{DECLARE
                   #{options[:declare].join(';')}} if options[:declare]
       drop_function name, params
       # execute
@@ -22,12 +22,12 @@ module RailsOnPg
       #{options[:as]} LANGUAGE 'plpgsql';
       }
     end
-    
-    # drop function   
+
+    # drop function
     def drop_function name, *params
-      execute "DROP FUNCTION IF EXISTS #{name}(#{params.join(',')}) CASCADE"    
+      execute "DROP FUNCTION IF EXISTS #{name}(#{params.join(',')}) CASCADE"
     end
-   
+
     # Create trigger function for it
     # <tt>name</tt> - trigger name
     # <tt>type</tt> - :before or :after
@@ -43,20 +43,39 @@ module RailsOnPg
       ON "#{table_name}" FOR EACH ROW
       EXECUTE PROCEDURE #{name}_f();}
     end
-    
+
     # Drop trigger
     def drop_trigger name, table_name
-      execute "DROP TRIGGER #{name} on #{table_name} CASCADE"    
+      execute "DROP TRIGGER #{name} on #{table_name} CASCADE"
     end
-   
+
    private
     def set_lang lang='plpgsql'
       begin
-        execute("CREATE LANGUAGE #{lang}")
-      rescue ActiveRecord::StatementInvalid => ex      
+        # execute("CREATE LANGUAGE #{lang}")
+        # FIXME : This is a temporary patch to allow use of rake db:migrate without crash
+        execute("CREATE OR REPLACE FUNCTION make_plpgsql()
+        RETURNS VOID
+        LANGUAGE SQL
+        AS $$
+        CREATE LANGUAGE plpgsql;
+        $$;
+
+        SELECT
+        CASE
+        WHEN EXISTS(
+        SELECT 1
+        FROM pg_catalog.pg_language
+        WHERE lanname='plpgsql'
+        )
+        THEN NULL
+        ELSE make_plpgsql() END;
+
+        DROP FUNCTION make_plpgsql();")
+      rescue ActiveRecord::StatementInvalid => ex
       end
     end
-   
-    
+
+
   end
 end
